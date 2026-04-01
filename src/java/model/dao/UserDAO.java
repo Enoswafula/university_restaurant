@@ -23,4 +23,26 @@ public class UserDAO {
         }
         return null;
     }
+    
+    // Member B (Authentication & User Management) should add this method
+
+public boolean insertUser(User user) {
+    try (Connection con = DBConnection.getConnection();
+         PreparedStatement ps = con.prepareStatement(
+            "INSERT INTO users(student_id, name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, ?)")) {
+        ps.setString(1, user.getStudentId());
+        ps.setString(2, user.getName());
+        ps.setString(3, user.getEmail());
+        ps.setString(4, user.getPasswordHash());
+        ps.setString(5, user.getRole());
+        ps.setBoolean(6, user.isActive());
+
+        int rows = ps.executeUpdate();
+        return rows > 0;
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+    return false;
+}
+
 }

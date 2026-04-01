@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+Click nbfs://nbhost/SystemFileSystem/Templates/XML/XMLDocument.xml to edit this template
+-->
+
+
+
+<root>
+    
+    <!-- Member B (Authentication & User Management) should configure this -->
+<servlet>
+    <servlet-name>LoginServlet</servlet-name>
+    <servlet-class>controller.LoginServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>LoginServlet</servlet-name>
+    <url-pattern>/LoginServlet</url-pattern>
+</servlet-mapping>
+
+<servlet>
+    <servlet-name>OrderServlet</servlet-name>
+    <servlet-class>controller.OrderServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>OrderServlet</servlet-name>
+    <url-pattern>/OrderServlet</url-pattern>
+</servlet-mapping>
+
+<servlet>
+    <servlet-name>RegisterServlet</servlet-name>
+    <servlet-class>controller.RegisterServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>RegisterServlet</servlet-name>
+    <url-pattern>/RegisterServlet</url-pattern>
+</servlet-mapping>
+
+<servlet>
+    <servlet-name>QueueServlet</servlet-name>
+    <servlet-class>controller.QueueServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>QueueServlet</servlet-name>
+    <url-pattern>/QueueServlet</url-pattern>
+</servlet-mapping>
+
+<servlet>
+    <servlet-name>PaymentServlet</servlet-name>
+    <servlet-class>controller.PaymentServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>PaymentServlet</servlet-name>
+    <url-pattern>/PaymentServlet</url-pattern>
+</servlet-mapping>
+
+
+
+
+
+    
+</root>
+
