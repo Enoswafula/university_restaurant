@@ -1,9 +1,3 @@
-# NetBeans machine-specific config
-nbproject/private/
-
-# Build output
-build/
-dist/
-
-# Windows junk
-Thumbs.db
+/nbproject/private/
+/build/
+/dist/
