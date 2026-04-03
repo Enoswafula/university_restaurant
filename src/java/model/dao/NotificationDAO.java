@@ -12,7 +12,6 @@ public class NotificationDAO {
                 "INSERT INTO notifications(customer_id, order_id, message, type, is_read, sent_at) VALUES (?, ?, ?, ?, ?, NOW())")) {
 
             ps.setInt(1, n.getCustomerId());
-            ps.setInt(2, n.getOrderId());
             ps.setString(3, n.getMessage());
             ps.setString(4, n.getType());
             ps.setBoolean(5, n.isRead());
