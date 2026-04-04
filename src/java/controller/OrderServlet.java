@@ -8,27 +8,36 @@ import java.io.IOException;
 import java.util.*;
 
 public class OrderServlet extends HttpServlet {
+
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        // Retrieve selected menu item and quantity
-        int menuId = Integer.parseInt(req.getParameter("menuId"));
-        int quantity = Integer.parseInt(req.getParameter("quantity"));
+        HttpSession session = req.getSession();
 
-        // Create a cart item (simple map for now)
-        Map<Integer, Integer> cart = (Map<Integer, Integer>) req.getSession().getAttribute("cart");
-        if (cart == null) {
-            cart = new HashMap<>();
+        Map<Integer, Integer> cart = new HashMap<>();
+
+        // Loop through all request parameters
+        Map<String, String[]> params = req.getParameterMap();
+
+        for (String key : params.keySet()) {
+            if (key.startsWith("qty_")) {
+                int menuId = Integer.parseInt(key.replace("qty_", ""));
+                int qty = Integer.parseInt(req.getParameter(key));
+
+                if (qty > 0) {
+                    cart.put(menuId, qty);
+                }
+            }
         }
 
-        // Add or update item in cart
-        cart.put(menuId, cart.getOrDefault(menuId, 0) + quantity);
+        if (cart.isEmpty()) {
+            resp.sendRedirect("menu.jsp");
+            return;
+        }
 
-        // Save cart back to session
-        req.getSession().setAttribute("cart", cart);
+        session.setAttribute("cart", cart);
 
-        // Redirect to cart review page
         resp.sendRedirect("order.jsp");
     }
 }

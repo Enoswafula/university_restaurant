@@ -20,7 +20,7 @@
     <form action="OrderServlet" method="post">
         <table border="1">
             <tr>
-                <th>Name</th><th>Description</th><th>Price</th><th>Meal Period</th><th>Select</th>
+                <th>Name</th><th>Description</th><th>Price</th><th>Meal Period</th><th>Quantity</th>
             </tr>
             <% for(MenuItem item : items) { %>
                 <tr>
@@ -29,7 +29,7 @@
                     <td>$<%= item.getPrice() %></td>
                     <td><%= item.getMealPeriod() %></td>
                     <td>
-                        <input type="checkbox" name="menuId" value="<%= item.getMenuId() %>" />
+                        <input type="number" name="qty_<%= item.getMenuId() %>" value="0" min="0" />
                     </td>
                 </tr>
             <% } %>
