@@ -3,10 +3,12 @@
 
      Access: cashier role only. Redirect to login if not cashier.
 
-     Handles three states:
-       1. Fresh form (no orderId) — cashier types the order ID manually.
-       2. Pre-filled form (orderId passed via GET ?orderId=X or request attribute).
-       3. Payment history panel (shown when paymentHistory attribute is set).
+     FIXED in v2:
+       - Removed <%@ include file="layout.jsp" %> from inside the <header><nav> block.
+         layout.jsp outputs a <p> tag (logged-in info) and role-based <a> links.
+         Placing it inside a <nav> within <header> caused invalid HTML
+         (<p> inside <nav> inside <header>) and duplicated navigation links.
+         The logout link and user info are now handled directly in this page's own nav.
 --%>
 <%@ page contentType="text/html;charset=UTF-8" %>
 <%@ page import="model.User, model.Payment, java.util.List" %>
@@ -40,6 +42,8 @@
     /* ── Payment history (set when action=history) ──────────────────── */
     List<Payment> paymentHistory =
         (List<Payment>) request.getAttribute("paymentHistory");
+
+    String ctxPath = request.getContextPath();
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,11 +56,13 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body   { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #333; }
         header { background: #2c3e50; color: #fff; padding: 14px 24px; display: flex;
-                 align-items: center; justify-content: space-between; }
+                 align-items: center; justify-content: space-between; flex-wrap: wrap;
+                 gap: 8px; }
         header h1 { font-size: 1.2rem; }
         header nav a { color: #ecf0f1; text-decoration: none; margin-left: 18px;
                        font-size: 0.9rem; }
         header nav a:hover { text-decoration: underline; }
+        .user-info { font-size: 0.82rem; color: #bdc3c7; margin-left: 18px; }
 
         .page-wrap { max-width: 860px; margin: 32px auto; padding: 0 16px; }
 
@@ -93,12 +99,12 @@
         /* ── Buttons ──────────────────────────────────────── */
         .btn { display: inline-block; padding: 10px 22px; border: none; border-radius: 5px;
                cursor: pointer; font-size: 0.95rem; text-decoration: none; }
-        .btn-primary { background: #3498db; color: #fff; }
+        .btn-primary   { background: #3498db; color: #fff; }
         .btn-primary:hover { background: #2980b9; }
         .btn-secondary { background: #7f8c8d; color: #fff; }
         .btn-secondary:hover { background: #636e72; }
         .btn-sm { padding: 6px 14px; font-size: 0.85rem; }
-        .btn-row { display: flex; gap: 12px; margin-top: 8px; }
+        .btn-row { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 
         /* ── Summary box ──────────────────────────────────── */
         .summary-box { background: #eaf4fb; border: 1px solid #b8dff5;
@@ -124,13 +130,19 @@
 </head>
 <body>
 
-<!-- ── Header / Nav ─────────────────────────────────────────────────── -->
+<!-- ── Header / Nav ──────────────────────────────────────────────────────────
+     FIXED: layout.jsp is NOT included here.
+     layout.jsp outputs a <p> tag (logged-in info) mixed with <a> links.
+     That caused invalid HTML and duplicate nav items when included inside <nav>.
+     Instead, we output the user info and logout link directly and cleanly here.
+──────────────────────────────────────────────────────────────────────────── -->
 <header>
     <h1>🏫 University Restaurant System</h1>
     <nav>
-        <a href="<%= request.getContextPath() %>/payment.jsp">Payments</a>
-        <a href="<%= request.getContextPath() %>/PaymentServlet?action=history">History</a>
-        <%@ include file="layout.jsp" %>
+        <a href="<%= ctxPath %>/payment.jsp">💳 Payments</a>
+        <a href="<%= ctxPath %>/PaymentServlet?action=history">📋 History</a>
+        <span class="user-info">👤 <%= user.getName() %> (Cashier)</span>
+        <a href="<%= ctxPath %>/LogoutServlet">Logout</a>
     </nav>
 </header>
 
@@ -163,7 +175,7 @@
         </div>
         <% } %>
 
-        <form action="<%= request.getContextPath() %>/PaymentServlet" method="post"
+        <form action="<%= ctxPath %>/PaymentServlet" method="post"
               id="paymentForm" novalidate>
 
             <!-- Order ID -->
@@ -212,7 +224,7 @@
 
             <div class="btn-row">
                 <button type="submit" class="btn btn-primary">✅ Confirm Payment</button>
-                <a href="<%= request.getContextPath() %>/payment.jsp"
+                <a href="<%= ctxPath %>/payment.jsp"
                    class="btn btn-secondary">🔄 Clear Form</a>
             </div>
         </form>
@@ -227,7 +239,7 @@
         <h2>📋 Payment History</h2>
 
         <div class="btn-row" style="margin-bottom:16px">
-            <a href="<%= request.getContextPath() %>/payment.jsp"
+            <a href="<%= ctxPath %>/payment.jsp"
                class="btn btn-primary btn-sm">➕ New Payment</a>
         </div>
 
@@ -304,25 +316,28 @@
     })();
 
     /* Client-side validation before submit */
-    document.getElementById('paymentForm').addEventListener('submit', function (e) {
-        var orderId = document.getElementById('orderId').value.trim();
-        var amount  = document.getElementById('amount').value.trim();
-        var method  = document.getElementById('paymentMethod').value;
-        var ref     = document.getElementById('transactionReference').value.trim();
+    var form = document.getElementById('paymentForm');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            var orderId = document.getElementById('orderId').value.trim();
+            var amount  = document.getElementById('amount').value.trim();
+            var method  = document.getElementById('paymentMethod').value;
+            var ref     = document.getElementById('transactionReference').value.trim();
 
-        if (!orderId || parseInt(orderId) <= 0) {
-            alert('Please enter a valid Order ID.');
-            e.preventDefault(); return;
-        }
-        if (!amount || parseFloat(amount) <= 0) {
-            alert('Please enter a valid amount greater than zero.');
-            e.preventDefault(); return;
-        }
-        if (method === 'mobile_money' && ref === '') {
-            alert('Please enter the M-Pesa transaction reference for Mobile Money payments.');
-            e.preventDefault(); return;
-        }
-    });
+            if (!orderId || parseInt(orderId) <= 0) {
+                alert('Please enter a valid Order ID.');
+                e.preventDefault(); return;
+            }
+            if (!amount || parseFloat(amount) <= 0) {
+                alert('Please enter a valid amount greater than zero.');
+                e.preventDefault(); return;
+            }
+            if (method === 'mobile_money' && ref === '') {
+                alert('Please enter the M-Pesa transaction reference for Mobile Money payments.');
+                e.preventDefault(); return;
+            }
+        });
+    }
 </script>
 </body>
 </html>
