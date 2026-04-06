@@ -37,6 +37,8 @@ public class OrderServlet extends HttpServlet {
         }
 
         session.setAttribute("cart", cart);
+        session.setAttribute("lastOrderId", newOrderId);
+
 
         resp.sendRedirect("order.jsp");
     }
