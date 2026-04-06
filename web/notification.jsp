@@ -3,12 +3,12 @@
 
      Access: student role only. Redirect to login if not a student.
 
-     Data flow:
-       GET /NotificationServlet → fetches notifications → forwards here
-           (Servlet sets request attribute "notifications" and "unreadCount")
-
-     Alternatively, if the page is accessed directly (without going through
-     the servlet), it fetches the data itself as a fallback.
+     FIXED in v2:
+       - Removed <%@ include file="layout.jsp" %> from inside the <header><nav> block.
+         layout.jsp outputs a <p> tag (logged-in info) mixed with <a> links.
+         Placing it inside <nav> inside <header> caused invalid HTML and
+         duplicated the navigation links already present in this page's own nav.
+         User info and logout are now handled directly inline.
 --%>
 <%@ page contentType="text/html;charset=UTF-8" %>
 <%@ page import="java.util.List, java.util.ArrayList, model.Notification, model.User, model.dao.NotificationDAO" %>
@@ -25,18 +25,19 @@
         (List<Notification>) request.getAttribute("notifications");
 
     if (notifications == null) {
-        // Fallback: page accessed directly (not via servlet)
+        // Fallback: page accessed directly (not via NotificationServlet)
         NotificationDAO dao = new NotificationDAO();
         notifications = dao.getNotificationsByUser(user.getUserId());
-        // Mark all as read since the student is viewing them
         dao.markAllAsRead(user.getUserId());
     }
 
-    /* ── Count unread for display ──────────────────────────────────── */
+    /* ── Count unread for display (before auto-mark-all-read) ─────── */
     int unreadCount = 0;
     for (Notification n : notifications) {
         if (!n.isRead()) unreadCount++;
     }
+
+    String ctxPath = request.getContextPath();
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -49,11 +50,13 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body   { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #333; }
         header { background: #2c3e50; color: #fff; padding: 14px 24px; display: flex;
-                 align-items: center; justify-content: space-between; }
+                 align-items: center; justify-content: space-between; flex-wrap: wrap;
+                 gap: 8px; }
         header h1 { font-size: 1.2rem; }
         header nav a { color: #ecf0f1; text-decoration: none; margin-left: 18px;
                        font-size: 0.9rem; }
         header nav a:hover { text-decoration: underline; }
+        .user-info { font-size: 0.82rem; color: #bdc3c7; margin-left: 18px; }
 
         .page-wrap { max-width: 800px; margin: 32px auto; padding: 0 16px; }
 
@@ -62,7 +65,7 @@
                 box-shadow: 0 2px 8px rgba(0,0,0,0.10); padding: 28px 32px; }
         .card-header { display: flex; align-items: center; justify-content: space-between;
                        margin-bottom: 20px; border-bottom: 2px solid #3498db;
-                       padding-bottom: 10px; }
+                       padding-bottom: 10px; flex-wrap: wrap; gap: 8px; }
         .card-header h2 { font-size: 1.3rem; color: #2c3e50; }
         .badge-count { background: #e74c3c; color: #fff; border-radius: 12px;
                        padding: 3px 9px; font-size: 0.82rem; font-weight: bold; }
@@ -97,8 +100,8 @@
         .notif-default .notif-icon { background: #e2e3e5; }
 
         /* Text block */
-        .notif-body { flex: 1; }
-        .notif-message { font-size: 0.95rem; line-height: 1.45; }
+        .notif-body { flex: 1; min-width: 0; }
+        .notif-message { font-size: 0.95rem; line-height: 1.45; word-break: break-word; }
         .notif-meta { font-size: 0.78rem; color: #888; margin-top: 4px; }
         .notif-meta .type-label {
             display: inline-block; padding: 2px 8px; border-radius: 10px;
@@ -123,32 +126,45 @@
 </head>
 <body>
 
-<!-- ── Header / Nav ─────────────────────────────────────────────────── -->
+<!-- ── Header / Nav ──────────────────────────────────────────────────────────
+     FIXED: layout.jsp is NOT included here.
+     We output the user info and correct student nav directly, avoiding the
+     duplicate-links and invalid <p>-inside-<nav> problems from v2.
+──────────────────────────────────────────────────────────────────────────── -->
 <header>
     <h1>🏫 University Restaurant System</h1>
     <nav>
-        <a href="<%= request.getContextPath() %>/menu.jsp">Menu</a>
-        <a href="<%= request.getContextPath() %>/order.jsp">My Orders</a>
-        <a href="<%= request.getContextPath() %>/queue.jsp">Queue</a>
-        <a href="<%= request.getContextPath() %>/NotificationServlet">🔔 Notifications</a>
-        <%@ include file="layout.jsp" %>
+        <a href="<%= ctxPath %>/menu.jsp">🍽️ Menu</a>
+        <a href="<%= ctxPath %>/order.jsp">📋 Orders</a>
+        <a href="<%= ctxPath %>/queue.jsp">🔢 Queue</a>
+        <a href="<%= ctxPath %>/NotificationServlet">
+            🔔 Notifications
+            <% if (unreadCount > 0) { %>
+                <span style="background:#e74c3c;color:#fff;border-radius:10px;
+                             padding:1px 6px;font-size:0.72rem;margin-left:3px;">
+                    <%= unreadCount %>
+                </span>
+            <% } %>
+        </a>
+        <span class="user-info">👤 <%= user.getName() %></span>
+        <a href="<%= ctxPath %>/LogoutServlet">Logout</a>
     </nav>
 </header>
 
 <div class="page-wrap">
     <div class="card">
 
-        <!-- ── Card header with unread badge ──────────────────────── -->
+        <!-- ── Card header with unread badge & mark-all button ────── -->
         <div class="card-header">
             <h2>🔔 Your Notifications</h2>
-            <div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <% if (unreadCount > 0) { %>
                     <span class="badge-count"><%= unreadCount %> unread</span>
                 <% } %>
 
                 <% if (!notifications.isEmpty()) { %>
-                    <form action="<%= request.getContextPath() %>/NotificationServlet"
-                          method="post" style="display:inline; margin-left:10px">
+                    <form action="<%= ctxPath %>/NotificationServlet"
+                          method="post" style="display:inline;">
                         <input type="hidden" name="action" value="markAllRead" />
                         <button type="submit" class="btn btn-outline btn-sm">
                             ✔ Mark all as read
@@ -182,7 +198,7 @@
                 %>
                 <li class="notif-item <%= cssClass %> <%= !n.isRead() ? "unread" : "" %>">
 
-                    <!-- Unread indicator dot -->
+                    <!-- Unread dot -->
                     <% if (!n.isRead()) { %>
                         <div class="unread-dot" title="Unread"></div>
                     <% } else { %>
@@ -204,10 +220,9 @@
                         </p>
                     </div>
 
-                    <!-- Mark as read button (only for unread) -->
+                    <!-- Mark single notification as read (only shown if unread) -->
                     <% if (!n.isRead()) { %>
-                        <form action="<%= request.getContextPath() %>/NotificationServlet"
-                              method="post">
+                        <form action="<%= ctxPath %>/NotificationServlet" method="post">
                             <input type="hidden" name="action" value="markRead" />
                             <input type="hidden" name="id" value="<%= n.getNotificationId() %>" />
                             <button type="submit" class="btn btn-sm btn-outline"
