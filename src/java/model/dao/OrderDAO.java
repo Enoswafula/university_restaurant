@@ -44,7 +44,7 @@ public class OrderDAO {
         }
         return list;
     }
-}
+
 
 public int getCustomerIdByOrder(int orderId) {
         String sql = "SELECT customer_id FROM orders WHERE order_id = ?";
@@ -64,3 +64,4 @@ public int getCustomerIdByOrder(int orderId) {
         }
         return -1;
     }
+}
