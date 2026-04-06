@@ -1,51 +1,54 @@
-<%-- Member D (Payments & Notifications) - notification.jsp
-     Student notification inbox.
+<%-- Member D (Payments & Notifications) - payment.jsp
+     Cashier payment processing page.
 
-     Access: student role only. Redirect to login if not a student.
+     Access: cashier role only. Redirect to login if not cashier.
 
-     Data flow:
-       GET /NotificationServlet → fetches notifications → forwards here
-           (Servlet sets request attribute "notifications" and "unreadCount")
-
-     Alternatively, if the page is accessed directly (without going through
-     the servlet), it fetches the data itself as a fallback.
+     Handles three states:
+       1. Fresh form (no orderId) — cashier types the order ID manually.
+       2. Pre-filled form (orderId passed via GET ?orderId=X or request attribute).
+       3. Payment history panel (shown when paymentHistory attribute is set).
 --%>
 <%@ page contentType="text/html;charset=UTF-8" %>
-<%@ page import="java.util.List, java.util.ArrayList, model.Notification, model.User, model.dao.NotificationDAO" %>
+<%@ page import="model.User, model.Payment, java.util.List" %>
 <%
     /* ── Session guard ─────────────────────────────────────────────── */
     User user = (User) session.getAttribute("user");
-    if (user == null || !"student".equals(user.getRole())) {
+    if (user == null || !"cashier".equals(user.getRole())) {
         response.sendRedirect(request.getContextPath() + "/LoginServlet");
         return;
     }
 
-    /* ── Fetch notifications if not already loaded by servlet ───────── */
-    List<Notification> notifications =
-        (List<Notification>) request.getAttribute("notifications");
-
-    if (notifications == null) {
-        // Fallback: page accessed directly (not via servlet)
-        NotificationDAO dao = new NotificationDAO();
-        notifications = dao.getNotificationsByUser(user.getUserId());
-        // Mark all as read since the student is viewing them
-        dao.markAllAsRead(user.getUserId());
+    /* ── One-time success flash from session ───────────────────────── */
+    String successMsg = (String) session.getAttribute("paymentSuccess");
+    if (successMsg != null) {
+        session.removeAttribute("paymentSuccess");
     }
 
-    /* ── Count unread for display ──────────────────────────────────── */
-    int unreadCount = 0;
-    for (Notification n : notifications) {
-        if (!n.isRead()) unreadCount++;
-    }
+    /* ── Error / warning from request (set by PaymentServlet) ───────── */
+    String errorMsg   = (String) request.getAttribute("error");
+    String warningMsg = (String) request.getAttribute("warning");
+
+    /* ── Pre-fill values (set when cashier arrives via ?orderId=X) ─── */
+    Object preOrderIdObj = request.getAttribute("prefilledOrderId");
+    Object preAmountObj  = request.getAttribute("prefilledAmount");
+    Object selMethodObj  = request.getAttribute("selectedMethod");
+
+    String preOrderId  = preOrderIdObj  != null ? preOrderIdObj.toString() : "";
+    String preAmount   = preAmountObj   != null ? preAmountObj.toString()  : "";
+    String selMethod   = selMethodObj   != null ? selMethodObj.toString()  : "cash";
+
+    /* ── Payment history (set when action=history) ──────────────────── */
+    List<Payment> paymentHistory =
+        (List<Payment>) request.getAttribute("paymentHistory");
 %>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Notifications – University Restaurant</title>
+    <title>Process Payment – University Restaurant</title>
     <style>
-        /* ── Base ─────────────────────────────────────────── */
+        /* ── Base reset & layout ─────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body   { font-family: Arial, Helvetica, sans-serif; background: #f4f6f8; color: #333; }
         header { background: #2c3e50; color: #fff; padding: 14px 24px; display: flex;
@@ -55,67 +58,65 @@
                        font-size: 0.9rem; }
         header nav a:hover { text-decoration: underline; }
 
-        .page-wrap { max-width: 800px; margin: 32px auto; padding: 0 16px; }
+        .page-wrap { max-width: 860px; margin: 32px auto; padding: 0 16px; }
 
         /* ── Card ────────────────────────────────────────── */
         .card { background: #fff; border-radius: 8px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.10); padding: 28px 32px; }
-        .card-header { display: flex; align-items: center; justify-content: space-between;
-                       margin-bottom: 20px; border-bottom: 2px solid #3498db;
-                       padding-bottom: 10px; }
-        .card-header h2 { font-size: 1.3rem; color: #2c3e50; }
-        .badge-count { background: #e74c3c; color: #fff; border-radius: 12px;
-                       padding: 3px 9px; font-size: 0.82rem; font-weight: bold; }
+                box-shadow: 0 2px 8px rgba(0,0,0,0.10); padding: 28px 32px;
+                margin-bottom: 28px; }
+        .card h2 { font-size: 1.3rem; color: #2c3e50; margin-bottom: 20px;
+                   border-bottom: 2px solid #3498db; padding-bottom: 8px; }
+
+        /* ── Alert banners ────────────────────────────────── */
+        .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 18px;
+                 font-size: 0.95rem; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+
+        /* ── Form ─────────────────────────────────────────── */
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-weight: bold; margin-bottom: 6px;
+                            font-size: 0.9rem; color: #555; }
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            width: 100%; padding: 10px 12px; border: 1px solid #ced4da;
+            border-radius: 5px; font-size: 0.95rem; transition: border-color .2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus { border-color: #3498db; outline: none; }
+        .form-group small { display: block; color: #888; font-size: 0.8rem; margin-top: 4px; }
+
+        .ref-group { display: none; } /* shown via JS for mobile money */
 
         /* ── Buttons ──────────────────────────────────────── */
-        .btn { display: inline-block; padding: 8px 18px; border: none; border-radius: 5px;
-               cursor: pointer; font-size: 0.88rem; text-decoration: none; }
-        .btn-outline { background: transparent; border: 1px solid #3498db; color: #3498db; }
-        .btn-outline:hover { background: #3498db; color: #fff; }
-        .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+        .btn { display: inline-block; padding: 10px 22px; border: none; border-radius: 5px;
+               cursor: pointer; font-size: 0.95rem; text-decoration: none; }
+        .btn-primary { background: #3498db; color: #fff; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-secondary { background: #7f8c8d; color: #fff; }
+        .btn-secondary:hover { background: #636e72; }
+        .btn-sm { padding: 6px 14px; font-size: 0.85rem; }
+        .btn-row { display: flex; gap: 12px; margin-top: 8px; }
 
-        /* ── Notification items ───────────────────────────── */
-        .notif-list { list-style: none; }
-        .notif-item {
-            display: flex; align-items: flex-start; gap: 14px;
-            padding: 14px 0; border-bottom: 1px solid #f0f0f0;
-            transition: background .15s;
+        /* ── Summary box ──────────────────────────────────── */
+        .summary-box { background: #eaf4fb; border: 1px solid #b8dff5;
+                       border-radius: 6px; padding: 14px 18px; margin-bottom: 20px; }
+        .summary-box p { margin: 4px 0; font-size: 0.9rem; }
+        .summary-box strong { color: #2c3e50; }
+
+        /* ── Payment history table ────────────────────────── */
+        .history-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .history-table th, .history-table td {
+            border: 1px solid #dee2e6; padding: 9px 12px; text-align: left;
         }
-        .notif-item:last-child { border-bottom: none; }
-        .notif-item.unread { background: #eaf4fb; border-radius: 6px;
-                             padding-left: 10px; padding-right: 10px; }
-
-        /* Icon circle */
-        .notif-icon {
-            flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.1rem;
-        }
-        .notif-order  .notif-icon { background: #d4edda; }
-        .notif-queue  .notif-icon { background: #cce5ff; }
-        .notif-promo  .notif-icon { background: #fff3cd; }
-        .notif-default .notif-icon { background: #e2e3e5; }
-
-        /* Text block */
-        .notif-body { flex: 1; }
-        .notif-message { font-size: 0.95rem; line-height: 1.45; }
-        .notif-meta { font-size: 0.78rem; color: #888; margin-top: 4px; }
-        .notif-meta .type-label {
-            display: inline-block; padding: 2px 8px; border-radius: 10px;
-            font-size: 0.72rem; font-weight: bold; margin-right: 6px;
-        }
-        .notif-order .type-label { background: #d4edda; color: #155724; }
-        .notif-queue .type-label { background: #cce5ff; color: #004085; }
-        .notif-promo .type-label { background: #fff3cd; color: #856404; }
-        .notif-default .type-label { background: #e2e3e5; color: #555; }
-
-        /* Unread dot */
-        .unread-dot { width: 8px; height: 8px; border-radius: 50%;
-                      background: #3498db; flex-shrink: 0; margin-top: 6px; }
-
-        /* Empty state */
-        .empty-state { text-align: center; padding: 48px 0; color: #aaa; }
-        .empty-state .emoji { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+        .history-table th { background: #2c3e50; color: #fff; }
+        .history-table tr:nth-child(even) { background: #f8f9fa; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px;
+                 font-size: 0.78rem; font-weight: bold; }
+        .badge-cash   { background: #d4edda; color: #155724; }
+        .badge-mobile { background: #cce5ff; color: #004085; }
 
         footer { text-align: center; padding: 18px; color: #888; font-size: 0.8rem;
                  margin-top: 24px; }
@@ -127,102 +128,201 @@
 <header>
     <h1>🏫 University Restaurant System</h1>
     <nav>
-        <a href="<%= request.getContextPath() %>/menu.jsp">Menu</a>
-        <a href="<%= request.getContextPath() %>/order.jsp">My Orders</a>
-        <a href="<%= request.getContextPath() %>/queue.jsp">Queue</a>
-        <a href="<%= request.getContextPath() %>/NotificationServlet">🔔 Notifications</a>
+        <a href="<%= request.getContextPath() %>/payment.jsp">Payments</a>
+        <a href="<%= request.getContextPath() %>/PaymentServlet?action=history">History</a>
         <%@ include file="layout.jsp" %>
     </nav>
 </header>
 
 <div class="page-wrap">
+
+    <!-- ── Flash messages ─────────────────────────────────────────── -->
+    <% if (successMsg != null) { %>
+        <div class="alert alert-success">✅ <%= successMsg %></div>
+    <% } %>
+    <% if (errorMsg != null) { %>
+        <div class="alert alert-error">❌ <%= errorMsg %></div>
+    <% } %>
+    <% if (warningMsg != null) { %>
+        <div class="alert alert-warning">⚠️ <%= warningMsg %></div>
+    <% } %>
+
+    <%-- ═══════════════════════════════════════════════════════════
+         PAYMENT FORM CARD
+    ══════════════════════════════════════════════════════════════ --%>
+    <% if (paymentHistory == null) { %>
     <div class="card">
+        <h2>💳 Process Payment</h2>
 
-        <!-- ── Card header with unread badge ──────────────────────── -->
-        <div class="card-header">
-            <h2>🔔 Your Notifications</h2>
-            <div>
-                <% if (unreadCount > 0) { %>
-                    <span class="badge-count"><%= unreadCount %> unread</span>
-                <% } %>
-
-                <% if (!notifications.isEmpty()) { %>
-                    <form action="<%= request.getContextPath() %>/NotificationServlet"
-                          method="post" style="display:inline; margin-left:10px">
-                        <input type="hidden" name="action" value="markAllRead" />
-                        <button type="submit" class="btn btn-outline btn-sm">
-                            ✔ Mark all as read
-                        </button>
-                    </form>
-                <% } %>
-            </div>
+        <% if (!preOrderId.isEmpty() && errorMsg == null && warningMsg == null) { %>
+        <div class="summary-box">
+            <p><strong>Order #<%= preOrderId %></strong> is ready for payment.</p>
+            <% if (!preAmount.isEmpty()) { %>
+            <p>Amount due: <strong>KES <%= preAmount %></strong></p>
+            <% } %>
         </div>
-
-        <!-- ── Notification list ──────────────────────────────────── -->
-        <% if (notifications.isEmpty()) { %>
-            <div class="empty-state">
-                <span class="emoji">📭</span>
-                <p>No notifications yet.</p>
-                <p style="font-size:0.85rem; margin-top:6px">
-                    Notifications will appear here when your order status changes,
-                    a payment is confirmed, or there are promotions.
-                </p>
-            </div>
-        <% } else { %>
-            <ul class="notif-list">
-                <% for (Notification n : notifications) {
-                       String cssClass = n.getTypeCssClass();
-                       String iconEmoji;
-                       switch (n.getType() == null ? "" : n.getType()) {
-                           case Notification.TYPE_ORDER_STATUS: iconEmoji = "🍽️"; break;
-                           case Notification.TYPE_QUEUE_UPDATE: iconEmoji = "🔢"; break;
-                           case Notification.TYPE_PROMOTION:    iconEmoji = "🎉"; break;
-                           default:                             iconEmoji = "📢"; break;
-                       }
-                %>
-                <li class="notif-item <%= cssClass %> <%= !n.isRead() ? "unread" : "" %>">
-
-                    <!-- Unread indicator dot -->
-                    <% if (!n.isRead()) { %>
-                        <div class="unread-dot" title="Unread"></div>
-                    <% } else { %>
-                        <div style="width:8px; flex-shrink:0;"></div>
-                    <% } %>
-
-                    <!-- Icon -->
-                    <div class="notif-icon"><%= iconEmoji %></div>
-
-                    <!-- Body -->
-                    <div class="notif-body">
-                        <p class="notif-message"><%= n.getMessage() %></p>
-                        <p class="notif-meta">
-                            <span class="type-label"><%= n.getTypeLabel() %></span>
-                            <% if (n.getOrderId() > 0) { %>
-                                Order #<%= n.getOrderId() %> &bull;
-                            <% } %>
-                            <%= n.getSentAt() != null ? n.getSentAt() : "" %>
-                        </p>
-                    </div>
-
-                    <!-- Mark as read button (only for unread) -->
-                    <% if (!n.isRead()) { %>
-                        <form action="<%= request.getContextPath() %>/NotificationServlet"
-                              method="post">
-                            <input type="hidden" name="action" value="markRead" />
-                            <input type="hidden" name="id" value="<%= n.getNotificationId() %>" />
-                            <button type="submit" class="btn btn-sm btn-outline"
-                                    title="Mark as read">✔</button>
-                        </form>
-                    <% } %>
-
-                </li>
-                <% } %>
-            </ul>
         <% } %>
 
+        <form action="<%= request.getContextPath() %>/PaymentServlet" method="post"
+              id="paymentForm" novalidate>
+
+            <!-- Order ID -->
+            <div class="form-group">
+                <label for="orderId">Order ID <span style="color:red">*</span></label>
+                <input type="number" id="orderId" name="orderId" min="1"
+                       value="<%= preOrderId %>"
+                       placeholder="Enter the order number"
+                       required />
+                <small>Ask the student for their Order ID or scan the queue ticket.</small>
+            </div>
+
+            <!-- Amount -->
+            <div class="form-group">
+                <label for="amount">Amount (KES) <span style="color:red">*</span></label>
+                <input type="number" id="amount" name="amount"
+                       min="0.01" step="0.01"
+                       value="<%= preAmount %>"
+                       placeholder="0.00"
+                       required />
+            </div>
+
+            <!-- Payment Method -->
+            <div class="form-group">
+                <label for="paymentMethod">Payment Method <span style="color:red">*</span></label>
+                <select id="paymentMethod" name="paymentMethod"
+                        onchange="toggleReference(this.value)">
+                    <option value="cash"
+                        <%= "cash".equals(selMethod) ? "selected" : "" %>>Cash</option>
+                    <option value="mobile_money"
+                        <%= "mobile_money".equals(selMethod) ? "selected" : "" %>>Mobile Money (M-Pesa)</option>
+                </select>
+            </div>
+
+            <!-- Transaction Reference (mobile money only) -->
+            <div class="form-group ref-group" id="refGroup">
+                <label for="transactionReference">
+                    M-Pesa Transaction Reference <span style="color:red">*</span>
+                </label>
+                <input type="text" id="transactionReference"
+                       name="transactionReference"
+                       placeholder="e.g. QA12B3C4D5"
+                       maxlength="100" />
+                <small>Enter the M-Pesa confirmation code sent to the customer's phone.</small>
+            </div>
+
+            <div class="btn-row">
+                <button type="submit" class="btn btn-primary">✅ Confirm Payment</button>
+                <a href="<%= request.getContextPath() %>/payment.jsp"
+                   class="btn btn-secondary">🔄 Clear Form</a>
+            </div>
+        </form>
     </div><!-- /.card -->
+    <% } %>
+
+    <%-- ═══════════════════════════════════════════════════════════
+         PAYMENT HISTORY TABLE (shown when action=history)
+    ══════════════════════════════════════════════════════════════ --%>
+    <% if (paymentHistory != null) { %>
+    <div class="card">
+        <h2>📋 Payment History</h2>
+
+        <div class="btn-row" style="margin-bottom:16px">
+            <a href="<%= request.getContextPath() %>/payment.jsp"
+               class="btn btn-primary btn-sm">➕ New Payment</a>
+        </div>
+
+        <% if (paymentHistory.isEmpty()) { %>
+            <p style="color:#888">No payments recorded yet.</p>
+        <% } else { %>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Payment ID</th>
+                    <th>Order ID</th>
+                    <th>Amount (KES)</th>
+                    <th>Method</th>
+                    <th>Reference</th>
+                    <th>Cashier</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% int rowNum = 1; for (Payment p : paymentHistory) { %>
+                <tr>
+                    <td><%= rowNum++ %></td>
+                    <td>#<%= p.getPaymentId() %></td>
+                    <td>#<%= p.getOrderId() %></td>
+                    <td><strong><%= String.format("%.2f", p.getAmount()) %></strong></td>
+                    <td>
+                        <% if (Payment.METHOD_MOBILE_MONEY.equals(p.getPaymentMethod())) { %>
+                            <span class="badge badge-mobile">Mobile Money</span>
+                        <% } else { %>
+                            <span class="badge badge-cash">Cash</span>
+                        <% } %>
+                    </td>
+                    <td>
+                        <%= (p.getTransactionReference() != null &&
+                             !p.getTransactionReference().isEmpty())
+                            ? p.getTransactionReference() : "—" %>
+                    </td>
+                    <td><%= p.getCashierName() != null ? p.getCashierName() : "—" %></td>
+                    <td><%= p.getPaymentDate() %></td>
+                    <td><%= p.getPaymentTime() %></td>
+                </tr>
+                <% } %>
+            </tbody>
+        </table>
+        <% } %>
+    </div><!-- /.card -->
+    <% } %>
+
 </div><!-- /.page-wrap -->
 
 <footer>&copy; 2026 University Restaurant Management System</footer>
+
+<script>
+    /* Show / hide the transaction reference field based on selected method */
+    function toggleReference(method) {
+        var refGroup = document.getElementById('refGroup');
+        var refInput = document.getElementById('transactionReference');
+        if (method === 'mobile_money') {
+            refGroup.style.display = 'block';
+            refInput.required = true;
+        } else {
+            refGroup.style.display = 'none';
+            refInput.required = false;
+            refInput.value = '';
+        }
+    }
+
+    /* Run on page load to handle pre-selected method (e.g. after a validation error) */
+    (function () {
+        var sel = document.getElementById('paymentMethod');
+        if (sel) toggleReference(sel.value);
+    })();
+
+    /* Client-side validation before submit */
+    document.getElementById('paymentForm').addEventListener('submit', function (e) {
+        var orderId = document.getElementById('orderId').value.trim();
+        var amount  = document.getElementById('amount').value.trim();
+        var method  = document.getElementById('paymentMethod').value;
+        var ref     = document.getElementById('transactionReference').value.trim();
+
+        if (!orderId || parseInt(orderId) <= 0) {
+            alert('Please enter a valid Order ID.');
+            e.preventDefault(); return;
+        }
+        if (!amount || parseFloat(amount) <= 0) {
+            alert('Please enter a valid amount greater than zero.');
+            e.preventDefault(); return;
+        }
+        if (method === 'mobile_money' && ref === '') {
+            alert('Please enter the M-Pesa transaction reference for Mobile Money payments.');
+            e.preventDefault(); return;
+        }
+    });
+</script>
 </body>
 </html>
