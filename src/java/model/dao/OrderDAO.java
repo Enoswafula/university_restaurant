@@ -15,7 +15,15 @@ public class OrderDAO {
             ps.setString(3, "PENDING"); // Initial status
 
             int rows = ps.executeUpdate();
-            return rows > 0;
+            if (rows > 0) {
+                try (ResultSet keys = ps.getGeneratedKeys()) {
+                    if (keys.next()) {
+                        int newId = keys.getInt(1);
+                        o.setOrderId(newId);  // inject back into the Order object
+                        return newId;          // return the generated ID
+                    }
+                }
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
